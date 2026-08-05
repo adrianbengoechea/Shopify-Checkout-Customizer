@@ -7,6 +7,8 @@ import {
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
 
+import { CreateShippingRestrictionType } from "./graphql/metaobjects/CreateShippingRestrictionType";
+
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
@@ -16,6 +18,30 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
+  hooks: {
+    afterAuth: async ({ session, admin }) => {
+      try {
+
+       const response = await admin.graphql(CreateShippingRestrictionType);
+       const { data } = await response.json();
+       const userErrors = data?.metaobjectDefinitionCreate?.userErrors;
+
+       if( userErrors?.length ){
+
+        const alreadyExists = userErrors.some( (err:any) => err.code == "TAKEN" || err.message.includes('already exists'))
+
+        if( alreadyExists ){
+          console.log('shipping_restriction_rule metaobject is already defined.')
+        }else{
+          console.log('shipping_restriction_rule metaobject definition creation failed: ', userErrors)
+        }
+       }
+
+      }catch(error){
+        console.error("Unexpected error creating metaobject definition: ", error)
+      }
+    }
+  },
   future: {
     expiringOfflineAccessTokens: true,
   },
